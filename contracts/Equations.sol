@@ -4,12 +4,32 @@ pragma solidity ^0.8.9;
 // Uncomment this line to use console.log
 // import "hardhat/console.sol";
 
+// TODO make sure any percentage or decimals is converted to basis points
+
 contract Equations {
 
-    
-    function rewardPerUser() public returns (uint256 rewards_) { 
-        // uint256 qualityAmount = qualityOfStaker(weightage0, weightage1, NE, QS) * stakeAmount;
+    struct StakerValue {
+        NoOfEndorcements NE;
+        QualityOfStakes QS;
+        uint256 stakeAmount;
+    }
+
+    /// @notice Gets the reward per user
+    /// @param m multiplier = (how much extra from the stake ammount you want to give) - (approximately the upper limit of the MR as long as the Q of the stakers is high)
+    /// @param MR a struct of the params to get the value of quality amount for each user
+    /// @param weightage0 weightage of the number of endorcements
+    /// @param weightage1 weightage of the quality of stakes
+    /// @notice the weightage should be entered in basis points and equals to 10_000
+    /// @param staker a struct of the params to get the value of the staker
+    function rewardPerUser(uint256 m, MaxRewards[] memory MR, uint256 weightage0, uint256 weightage1, StakerValue memory staker) public pure returns (uint256 rewards_) { 
         
+        uint256 maxReward = getMaxRewards(m, MR, weightage0, weightage1);
+        
+        uint256 valueOfStaker = valueOfQualityAmount(weightage0, weightage1, staker.NE, staker.QS, staker.stakeAmount);
+
+        uint256 sumOfStakers = getSumOfStakers(MR, weightage0, weightage1);
+
+        rewards_ = (valueOfStaker / sumOfStakers) * maxReward;
     }
 
     struct MaxRewards {
@@ -25,16 +45,27 @@ contract Equations {
     /// @param weightage0 weightage of the number of endorcements
     /// @param weightage1 weightage of the quality of stakes
     /// @notice the weightage should be entered in basis points and equals to 10_000
-    function maxRewards(uint256 m, MaxRewards[] memory MR, uint256 weightage0, uint256 weightage1) public pure returns (uint256 maxRewards_) {
+    function getMaxRewards(uint256 m, MaxRewards[] memory MR, uint256 weightage0, uint256 weightage1) public pure returns (uint256 maxRewards_) {
+        
+        uint256 sumOfStakers = getSumOfStakers(MR, weightage0, weightage1);
+
+        maxRewards_ = (sumOfStakers * m) / 10_000;
+    }
+
+    /// @notice Gets the sum of staker quality amount on a user
+    /// @param MR struct used to get the values relevant to find the sum of stakers and max rewards
+    /// @param weightage0 weightage of the number of endorcements
+    /// @param weightage1 weightage of the quality of stakes
+    /// @notice the weightage should be entered in basis points and equals to 10_000
+    function getSumOfStakers(MaxRewards[] memory MR, uint256 weightage0, uint256 weightage1) public pure returns (uint256 sumOfStakers_) {
         require(MR.length != 0, "!length");
+
         uint256 L = MR.length;
-        uint256 sum = 0;
+        sumOfStakers_ = 0;
 
         for(uint256 i = 0; i < L; i++){
-            sum += valueOfQualityAmount(weightage0, weightage1, MR[i].NE, MR[i].QS, MR[i].stakeAmount);
+            sumOfStakers_ += valueOfQualityAmount(weightage0, weightage1, MR[i].NE, MR[i].QS, MR[i].stakeAmount);
         }
-
-        maxRewards_ = (sum * m) / 10_000;
     }
 
     /// @notice get the sum of quality of a user
@@ -97,7 +128,3 @@ contract Equations {
         number_ = (((1 + v) / mE) * eN - v) / 10_000;
     }
 }
-
-// make sure any percentage or decimals is converted to basis points
-// add in remaining function
-// - reward per staker
