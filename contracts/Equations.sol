@@ -1,10 +1,6 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.9;
-
-// Uncomment this line to use console.log
 import "hardhat/console.sol";
-
-// TODO make sure any percentage or decimals is converted to basis points
 
 contract Equations {
 
@@ -35,7 +31,20 @@ contract Equations {
 
         uint256 sumOfStakers = getSumOfStakers(MR, weightage0, weightage1);
 
-        rewards_ = (valueOfStaker / sumOfStakers) * maxReward;
+        uint256 percent = _getPercent(valueOfStaker, sumOfStakers, 4);
+
+        rewards_ = percent * maxReward / 10000;
+    }
+
+    function _getPercent(
+        uint256 _num,
+        uint256 _denom,
+        uint256 _precision
+    ) internal pure returns (uint256 quotient) {
+        // caution, check safe-to-multiply here
+        uint256 num = _num * 10 ** (_precision + 1);
+        // with rounding of last digit
+        quotient = ((num / _denom) + 5) / 10;
     }
 
     struct MaxRewards {
@@ -52,9 +61,7 @@ contract Equations {
     /// @param weightage1 weightage of the quality of stakes
     /// @notice the weightage should be entered in basis points and equals to 10_000
     function getMaxRewards(uint256 m, MaxRewards[] memory MR, uint256 weightage0, uint256 weightage1) public view returns (uint256 maxRewards_) {
-        
         uint256 sumOfStakers = getSumOfStakers(MR, weightage0, weightage1);
-
         maxRewards_ = (sumOfStakers * m) / 10_000;
     }
 
@@ -105,13 +112,14 @@ contract Equations {
     /// @param QS a struct of the params for getting the quality of stakes
     /// @return quality_ returns the quality of a staker
     function qualityOfStaker(uint256 weightage0, uint256 weightage1, NoOfEndorcements memory NE, QualityOfStakes memory QS) public view returns (uint256 quality_){
-        quality_ = ((weightage0 * numberOfEndorcements(NE.v, NE.mE, NE.eN))) / 10_100 + ((weightage1 * qualityOfStakes(QS.cr, QS.cd))) / 10_000;
+        quality_ = (((weightage0 * numberOfEndorcements(NE.v, NE.mE, NE.eN))) + ((weightage1 * qualityOfStakes(QS.cr, QS.cd)))) / 10000;
     }
     
     /// @notice determine the quality of stake
-    /// @param cr how much the user brings to a protocol
+    /// @param cr how much the user i brings to a protocol
     /// @param cd how much staked on this user
-    /// @notice the number of users that you staked
+    /// @notice N the number of users that you staked
+    /// @notice values are scaled up to add more precision and ensure sum can be divided by N
     /// @return quality_ the quality of stakes
     function qualityOfStakes(uint256[] memory cr, uint256[] memory cd) public view returns (uint256 quality_) {
         require(cr.length == cd.length, "!length");
@@ -119,23 +127,25 @@ contract Equations {
         uint256 sum = 0;
 
         for(uint256 i = 0; i < N; i++){
-            sum += cr[i] / cd[i];
+            //scaled up to 10_000
+            sum += cr[i] * 10_000  / cd[i] * 10_000;
         }
 
-        quality_ = sum / N;
+        // scaled down to get basis points or percentage, i.e 5000 = 50%
+        quality_ = (sum / N) / 10_000;
     }
 
     /// @notice calculate the number of endorcement points
     /// @param v penalty number for small number of endorcements
-    /// @notice penalty should be entered as a basis point and be less than 10_000
     /// @param mE max number of endorcements
     /// @param eN number of endorcements
-    // TODO Explain this out of 100
+    /// @notice scaled to be 100 instead of one since theres not decimals
     function numberOfEndorcements(uint256 v, uint256 mE, uint256 eN) public view returns (uint256 number_) {
-        console.log("1 + v = ", 10000 + v);
-        console.log("((10000 + v) / mE) = ", ((10000 + v) / mE));
-        console.log("eN - v = ", eN - v);
+        require(eN < mE, "!eN");
 
-        number_ = (((100 + v) / mE) * eN - v);
+        number_ = ((100 + v) / (mE * 100)) * (eN*100);
+        if(number_ != 0){
+            number_ -= v;
+        }
     }
 }
